@@ -18,81 +18,98 @@ type header struct {
 }
 
 type payload struct {
-	User string  `json:"user"`
+	ID   int32   `json:"id"`
 	Time string  `json:"time"`
 	Dur  float64 `json:"dur"`
 }
 
-func generateJwt(user string, secret []byte) (string, error) {
-	var strs [3]string
+func generateJwt(id int32, secret []byte) (string, error) {
+	var err error
+	var parts [3]string
+	var result string
+	var h header
+	var hMarshal []byte
+	var p payload
+	var pMarshal []byte
+
 	// Header
-	h := header{"HS256", "JWT"}
-	hs, err := json.Marshal(h)
+	h = header{"HS256", "JWT"}
+	hMarshal, err = json.Marshal(h)
 	if err != nil {
 		return "", err
 	}
-	strs[0] = base64.StdEncoding.EncodeToString(hs)
+	parts[0] = base64.StdEncoding.EncodeToString(hMarshal)
 	// Data
-	data := payload{
-		User: user,
+	p = payload{
+		ID:   id,
 		Time: time.Now().Format(time.RFC1123),
 		Dur:  2,
 	}
-	ps, err := json.Marshal(data)
+	pMarshal, err = json.Marshal(p)
 	if err != nil {
 		return "", err
 	}
-	strs[1] = base64.StdEncoding.EncodeToString(ps)
+	parts[1] = base64.StdEncoding.EncodeToString(pMarshal)
 	// Signature
 	hs256 := hmac.New(sha256.New, secret)
-	_, err = fmt.Fprintf(hs256, "%s.%s", strs[0], strs[1])
+	_, err = fmt.Fprintf(hs256, "%s.%s", parts[0], parts[1])
 	if err != nil {
 		return "", err
 	}
-	strs[2] = hex.EncodeToString(hs256.Sum(nil))
-	result := strings.Join(strs[:], ".")
+	parts[2] = hex.EncodeToString(hs256.Sum(nil))
+	result = strings.Join(parts[:], ".")
 	return result, nil
 }
 
 func decodeJwt(tkn string, secret []byte) (*header, *payload, error) {
 	var err error
-	strs := strings.Split(tkn, ".")
-	if len(strs) != 3 {
-		return nil, nil, err
+	var parts []string
+	var actualSignature string
+	var hMarshal []byte
+	var h header
+	var pMarshal []byte
+	var p payload
+
+	parts = strings.Split(tkn, ".")
+	if len(parts) != 3 {
+		return nil, nil, errors.New("too many token parts")
 	}
 
 	hs256 := hmac.New(sha256.New, secret)
-	_, err = fmt.Fprintf(hs256, "%s.%s", strs[0], strs[1])
+	_, err = fmt.Fprintf(hs256, "%s.%s", parts[0], parts[1])
 	if err != nil {
 		return nil, nil, err
 	}
-	signature := hex.EncodeToString(hs256.Sum(nil))
-	if signature != strs[2] {
-		return nil, nil, errors.New("Invalid token")
+	actualSignature = hex.EncodeToString(hs256.Sum(nil))
+	if actualSignature != parts[2] {
+		return nil, nil, errors.New("invalid token")
 	}
 
-	hDecoded, err := base64.StdEncoding.DecodeString(strs[0])
+	hMarshal, err = base64.StdEncoding.DecodeString(parts[0])
 	if err != nil {
 		return nil, nil, err
 	}
-	var h header
-	err = json.Unmarshal(hDecoded, &h)
+	err = json.Unmarshal(hMarshal, &h)
 	if err != nil {
 		return nil, nil, err
 	}
-	pDecoded, err := base64.StdEncoding.DecodeString(strs[1])
+	pMarshal, err = base64.StdEncoding.DecodeString(parts[1])
 	if err != nil {
 		return nil, nil, err
 	}
-	var p payload
-	err = json.Unmarshal(pDecoded, &p)
+	err = json.Unmarshal(pMarshal, &p)
 	if err != nil {
 		return nil, nil, err
 	}
 	return &h, &p, nil
 }
 
-func isTokenValid(tkn string, secret []byte) bool {
+type UserGetter interface {
+	GetUserFromID(id int32) (*User, error)
+}
+
+/*
+func isTokenValid(tkn string, secret []byte, ug UserGetter) bool {
 	var err error
 	_, p, err := decodeJwt(tkn, secret)
 	if err != nil {
@@ -103,5 +120,10 @@ func isTokenValid(tkn string, secret []byte) bool {
 	if err != nil {
 		return false
 	}
-	return time.Since(then).Hours() <= p.Dur
+	if time.Since(then).Hours() > p.Dur {
+		return false
+	}
+
+	p.User
 }
+*/
