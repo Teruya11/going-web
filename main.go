@@ -7,18 +7,15 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"going-web/db"
+	"going-web/jwt"
 )
 
-type UserRequest struct {
-	User   string `json:"user"`
-	Passwd string `json:"passwd"`
-}
-
 func main() {
-	db := make(map[string]string)
 	var err error
 
-	var dbm DBManager
+	var dbm db.DBManager
 	err = dbm.Connect("authie", "authie", "authie")
 	if err != nil {
 		log.Fatal(err)
@@ -27,23 +24,35 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	id, err := dbm.SaveUser(&db.UserRequest{Email: "foo@bar.com", Passwd: "foo"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(id, err)
+
+	usr, err := dbm.GetUserFromEmail("foo@bar.com")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%v\n", usr)
 
 	secret := []byte("secret")
-	tkn, err := generateJwt("admin", secret)
+	tkn, err := jwt.New(1, secret)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println(tkn)
-	h, p, err := decodeJwt(tkn, secret)
+	p, err := jwt.Decode(tkn, secret)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("%v %v\n", h, p)
-	fmt.Printf("%v\n", isTokenValid(tkn, secret))
+
+	fmt.Printf("%v\n", p)
+	fmt.Printf("%v\n", jwt.Verify(tkn, secret))
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/user", userHandler(&db, secret))
-	mux.HandleFunc("/time", middleware(timeHandler(time.RFC1123), &db))
+	mux.HandleFunc("/register", registerHandler(&dbm, secret))
+	mux.HandleFunc("/time", middleware(secret, timeHandler(time.RFC1123)))
 
 	const port = 3000
 	log.Printf("Listening on %d\n", port)
@@ -51,43 +60,81 @@ func main() {
 	log.Fatal(err)
 }
 
-func userHandler(db *map[string]string, secret []byte) http.HandlerFunc {
+func registerHandler(dbm *db.DBManager, secret []byte) http.HandlerFunc {
 	// Receive request and save user locally
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "400 Bad Request", http.StatusBadRequest)
 			return
 		}
-		var user UserRequest
+		var user db.UserRequest
 		err := json.NewDecoder(r.Body).Decode(&user)
 		if err != nil {
 			http.Error(w, "400 Bad Request", http.StatusBadRequest)
 			return
 		}
-		if _, exists := (*db)[user.User]; exists {
+
+		found, _ := dbm.GetUserFromEmail(user.Email)
+		if found != nil {
 			http.Error(w, "409 User Already Exists", http.StatusConflict)
 			return
 		}
-		(*db)[user.User] = user.Passwd
-		// Give Jwt token
-		tkn, err := generateJwt(user.User, secret)
+
+		id, err := dbm.SaveUser(&user)
 		if err != nil {
 			log.Fatal(err)
 			return
 		}
-		w.Write([]byte(tkn))
+		// Give Jwt token
+		tkn, err := jwt.New(id, secret)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		_, err = w.Write([]byte(tkn))
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
 	}
 }
 
-func middleware(handler http.Handler, db *map[string]string) http.HandlerFunc {
+func middleware(secret []byte, handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		_, tkn, ok := strings.Cut(auth, "Bearer ")
+		var authHeader string
+		var ok bool
+		var tkn string
+		var p *jwt.Payload
+		var err error
+
+		authHeader = r.Header.Get("Authorization")
+		tkn, ok = strings.CutPrefix(authHeader, "Bearer ")
 		if !ok {
 			http.Error(w, "400 Bad Request", http.StatusBadRequest)
 			return
 		}
-		log.Println(tkn)
+
+		if ok = jwt.Verify(tkn, secret); !ok {
+			http.Error(w, "401 Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		p, err = jwt.Decode(tkn, secret)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		then, err := time.Parse(time.RFC1123, p.Time)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		elapsed := time.Since(then).Hours()
+		if elapsed > p.Dur {
+			http.Error(w, "401 Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		handler.ServeHTTP(w, r)
 	}
 }
