@@ -20,12 +20,12 @@ type header struct {
 }
 
 type Payload struct {
-	ID   int32   `json:"id"`
-	Time string  `json:"time"`
+	ID   int64   `json:"id"`
 	Dur  float64 `json:"dur"`
+	Time string  `json:"time"`
 }
 
-func New(id int32, secret []byte) (string, error) {
+func New(id int64, secret []byte) (string, error) {
 	var err error
 	var parts [3]string
 	var result string
