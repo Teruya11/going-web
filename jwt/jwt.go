@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"strings"
 	"time"
 
@@ -66,46 +67,19 @@ func NewJWT(id int32, secret []byte) (JWT, error) {
 	return result, nil
 }
 
-/*
-func (jwt JWT) Valid(secret []byte) bool {
-	var err error
-	var hs256 hash.Hash
-
-	hs256 = hmac.New(sha256.New, secret)
-	_, err = fmt.Fprintf(hs256, "%s.%s", parts[0], parts[1])
-	if err != nil {
-		return nil, nil, err
-	}
-	actualSignature = hex.EncodeToString(hs256.Sum(nil))
-	if actualSignature != parts[2] {
-		return nil, nil, errors.New("invalid token")
-	}
-}
-*/
-
 func (jwt JWT) Decode(secret []byte) (*header, *payload, error) {
 	var err error
 	var parts []string
-	var actualSignature string
 	var hMarshal []byte
 	var h header
 	var pMarshal []byte
 	var p payload
 
-	parts = strings.Split(string(jwt), ".")
-	if len(parts) != 3 {
-		return nil, nil, errors.New("too many token parts")
-	}
-
-	hs256 := hmac.New(sha256.New, secret)
-	_, err = fmt.Fprintf(hs256, "%s.%s", parts[0], parts[1])
-	if err != nil {
-		return nil, nil, err
-	}
-	actualSignature = hex.EncodeToString(hs256.Sum(nil))
-	if actualSignature != parts[2] {
+	if ok := jwt.Verify(secret); !ok {
 		return nil, nil, errors.New("invalid token")
 	}
+
+	parts = strings.Split(string(jwt), ".")
 
 	hMarshal, err = base64.StdEncoding.DecodeString(parts[0])
 	if err != nil {
@@ -115,6 +89,7 @@ func (jwt JWT) Decode(secret []byte) (*header, *payload, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+
 	pMarshal, err = base64.StdEncoding.DecodeString(parts[1])
 	if err != nil {
 		return nil, nil, err
@@ -123,6 +98,7 @@ func (jwt JWT) Decode(secret []byte) (*header, *payload, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return &h, &p, nil
 }
 
@@ -130,22 +106,53 @@ type UserGetter interface {
 	GetUserFromID(id int32) (*db.User, error)
 }
 
-/*
-func isTokenValid(tkn string, secret []byte, ug UserGetter) bool {
+func (jwt JWT) Validate(secret []byte, ug UserGetter) (ok bool) {
 	var err error
-	_, p, err := decodeJwt(tkn, secret)
+	var p *payload
+	var then time.Time
+	var duration float64
+	var user *db.User
+
+	_, p, err = jwt.Decode(secret)
 	if err != nil {
 		return false
 	}
 
-	then, err := time.Parse(time.RFC1123, p.Time)
+	then, err = time.Parse(time.RFC1123, p.Time)
 	if err != nil {
 		return false
 	}
-	if time.Since(then).Hours() > p.Dur {
+	duration = time.Since(then).Hours()
+	if duration > p.Dur {
 		return false
 	}
 
-	p.User
+	user, err = ug.GetUserFromID(p.ID)
+	if err != nil {
+		return false
+	}
+
+	return user != nil
 }
-*/
+
+func (jwt JWT) Verify(secret []byte) (ok bool) {
+	var err error
+	var hs256 hash.Hash
+	var parts []string
+	var actualSignature string
+	var receivedSignature string
+
+	parts = strings.Split(string(jwt), ".")
+	if len(parts) != 3 {
+		return false
+	}
+
+	hs256 = hmac.New(sha256.New, secret)
+	_, err = fmt.Fprintf(hs256, "%s.%s", parts[0], parts[1])
+	if err != nil {
+		return false
+	}
+	actualSignature = hex.EncodeToString(hs256.Sum(nil))
+	receivedSignature = parts[2]
+	return actualSignature == receivedSignature
+}
