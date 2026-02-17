@@ -12,8 +12,6 @@ import (
 	"hash"
 	"strings"
 	"time"
-
-	"going-web/db"
 )
 
 type header struct {
@@ -21,40 +19,32 @@ type header struct {
 	Typ string `json:"typ"`
 }
 
-type payload struct {
+type Payload struct {
 	ID   int32   `json:"id"`
 	Time string  `json:"time"`
 	Dur  float64 `json:"dur"`
 }
 
-type JWT string
-
-func New(id int32, secret []byte) (JWT, error) {
+func New(id int32, secret []byte) (string, error) {
 	var err error
 	var parts [3]string
-	var result JWT
+	var result string
 	var h header
 	var hMarshal []byte
-	var p payload
+	var p Payload
 	var pMarshal []byte
 
 	// Header
 	h = header{"HS256", "JWT"}
-	hMarshal, err = json.Marshal(h)
-	if err != nil {
-		return "", err
-	}
+	hMarshal, _ = json.Marshal(h)
 	parts[0] = base64.StdEncoding.EncodeToString(hMarshal)
 	// Data
-	p = payload{
+	p = Payload{
 		ID:   id,
 		Time: time.Now().Format(time.RFC1123),
 		Dur:  2,
 	}
-	pMarshal, err = json.Marshal(p)
-	if err != nil {
-		return "", err
-	}
+	pMarshal, _ = json.Marshal(p)
 	parts[1] = base64.StdEncoding.EncodeToString(pMarshal)
 	// Signature
 	hs256 := hmac.New(sha256.New, secret)
@@ -63,86 +53,41 @@ func New(id int32, secret []byte) (JWT, error) {
 		return "", err
 	}
 	parts[2] = hex.EncodeToString(hs256.Sum(nil))
-	result = JWT(strings.Join(parts[:], "."))
+	result = strings.Join(parts[:], ".")
 	return result, nil
 }
 
-func (jwt JWT) Decode(secret []byte) (*header, *payload, error) {
+func Decode(tkn string, secret []byte) (*Payload, error) {
 	var err error
 	var parts []string
-	var hMarshal []byte
-	var h header
 	var pMarshal []byte
-	var p payload
+	var p Payload
 
-	if ok := jwt.Verify(secret); !ok {
-		return nil, nil, errors.New("invalid token")
+	if ok := Verify(tkn, secret); !ok {
+		return nil, errors.New("invalid token")
 	}
 
-	parts = strings.Split(string(jwt), ".")
-
-	hMarshal, err = base64.StdEncoding.DecodeString(parts[0])
-	if err != nil {
-		return nil, nil, err
-	}
-	err = json.Unmarshal(hMarshal, &h)
-	if err != nil {
-		return nil, nil, err
-	}
-
+	parts = strings.Split(tkn, ".")
 	pMarshal, err = base64.StdEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	err = json.Unmarshal(pMarshal, &p)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return &h, &p, nil
+	return &p, nil
 }
 
-type UserGetter interface {
-	GetUserFromID(id int32) (*db.User, error)
-}
-
-func (jwt JWT) Validate(secret []byte, ug UserGetter) (ok bool) {
-	var err error
-	var p *payload
-	var then time.Time
-	var duration float64
-	var user *db.User
-
-	_, p, err = jwt.Decode(secret)
-	if err != nil {
-		return false
-	}
-
-	then, err = time.Parse(time.RFC1123, p.Time)
-	if err != nil {
-		return false
-	}
-	duration = time.Since(then).Hours()
-	if duration > p.Dur {
-		return false
-	}
-
-	user, err = ug.GetUserFromID(p.ID)
-	if err != nil {
-		return false
-	}
-
-	return user != nil
-}
-
-func (jwt JWT) Verify(secret []byte) (ok bool) {
+func Verify(tkn string, secret []byte) (ok bool) {
 	var err error
 	var hs256 hash.Hash
 	var parts []string
 	var actualSignature string
 	var receivedSignature string
 
-	parts = strings.Split(string(jwt), ".")
+	parts = strings.Split(tkn, ".")
 	if len(parts) != 3 {
 		return false
 	}
