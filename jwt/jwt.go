@@ -29,7 +29,7 @@ type payload struct {
 
 type JWT string
 
-func NewJWT(id int32, secret []byte) (JWT, error) {
+func New(id int32, secret []byte) (JWT, error) {
 	var err error
 	var parts [3]string
 	var result JWT

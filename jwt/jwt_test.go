@@ -9,7 +9,7 @@ import (
 
 func TestNewJWT(t *testing.T) {
 	secret := []byte("secret")
-	_, err := NewJWT(1, secret)
+	_, err := New(1, secret)
 	if err != nil {
 		t.Error(err)
 	}
@@ -99,7 +99,7 @@ func (m *Mock) GetUserFromID(id int32) (*db.User, error) {
 
 func TestValidateOk(t *testing.T) {
 	secret := []byte("secret")
-	tkn, err := NewJWT(1, secret)
+	tkn, err := New(1, secret)
 	if err != nil {
 		t.Error("expected token generation to work")
 	}
@@ -113,7 +113,7 @@ func TestValidateOk(t *testing.T) {
 
 func TestValidateUserNotFound(t *testing.T) {
 	secret := []byte("secret")
-	tkn, err := NewJWT(2, secret)
+	tkn, err := New(2, secret)
 	if err != nil {
 		t.Error("expected token generation to work")
 	}
