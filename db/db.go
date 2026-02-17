@@ -7,9 +7,14 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
+type UserRequest struct {
+	Email  string `json:"email"`
+	Passwd string `json:"passwd"`
+}
+
 type User struct {
-	ID     int32
-	Name   string
+	ID     int64
+	Email  string
 	Passwd string
 }
 
@@ -41,29 +46,50 @@ func (dbm *DBManager) CreateTables(drop bool) error {
 	_, err = dbm.db.Exec(`
 		CREATE TABLE IF NOT EXISTS 
 		users (
-			id 			INT PRIMARY KEY,
-			name 		VARCHAR(256) NOT NULL,
-			passwd_hash VARCHAR(512) NOT NULL
+			id      INT PRIMARY KEY AUTO_INCREMENT,
+			email   TEXT NOT NULL,
+			passwd  TEXT NOT NULL
 		)
 	`)
 	return err
 }
 
-func (dbm *DBManager) GetUserFromID(id int32) (user *User, err error) {
-	q, err := dbm.db.Query("SELECT * FROM users WHERE id = ?", id)
+func (dbm *DBManager) GetUserFromEmail(email string) (user *User, err error) {
+	q, err := dbm.db.Query("SELECT * FROM users WHERE email = ?", email)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		err = q.Close()
-	}()
+	defer q.Close()
 
 	if !q.Next() {
 		return nil, q.Err()
 	}
-	err = q.Scan(&user.ID, &user.Name, &user.Passwd)
+	user = new(User)
+	err = q.Scan(&user.ID, &user.Email, &user.Passwd)
 	if err != nil {
 		return nil, err
 	}
 	return user, nil
+}
+
+func (dbm *DBManager) SaveUser(user *UserRequest) (id int64, err error) {
+	tx, err := dbm.db.Begin()
+	if err != nil {
+		return -1, err
+	}
+	defer tx.Rollback()
+
+	resut, err := tx.Exec("INSERT INTO users (email, passwd) VALUES (?, ?)", user.Email, user.Passwd)
+	if err != nil {
+		return -1, err
+	}
+	id, err = resut.LastInsertId()
+	if err != nil {
+		return -1, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return -1, err
+	}
+	return id, nil
 }
