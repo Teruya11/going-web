@@ -38,19 +38,35 @@ func (dbm *DBManager) CreateTables(drop bool) error {
 	var err error
 
 	if drop {
-		_, err = dbm.db.Exec("DROP TABLE IF EXISTS users")
+		_, err = dbm.db.Exec("DROP TABLE IF EXISTS tasks, users")
 		if err != nil {
 			return err
 		}
 	}
-	_, err = dbm.db.Exec(`
+	const createUsersTable = `
 		CREATE TABLE IF NOT EXISTS 
 		users (
 			id      INT PRIMARY KEY AUTO_INCREMENT,
 			email   TEXT NOT NULL,
 			passwd  TEXT NOT NULL
 		)
-	`)
+	`
+	_, err = dbm.db.Exec(createUsersTable)
+	if err != nil {
+		return err
+	}
+
+	const createTasksTable = `
+		CREATE TABLE IF NOT EXISTS 
+		tasks (
+			id      INT PRIMARY KEY AUTO_INCREMENT,
+			done    BOOL NOT NULL,
+			title   TEXT NOT NULL,
+			user_id INT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		)
+	`
+	_, err = dbm.db.Exec(createTasksTable)
 	return err
 }
 
