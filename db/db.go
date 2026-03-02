@@ -18,6 +18,19 @@ type User struct {
 	Passwd string
 }
 
+type NewTaskRequest struct {
+	Title  string `json:"title"`
+	UserID int64  `json:"user_id"`
+	Done   bool   `json:"done"`
+}
+
+type Task struct {
+	Title  string
+	ID     int64
+	UserID int64
+	Done   bool
+}
+
 type DBManager struct {
 	db *sql.DB
 }
@@ -95,11 +108,35 @@ func (dbm *DBManager) SaveUser(user *UserRequest) (id int64, err error) {
 	}
 	defer tx.Rollback()
 
-	resut, err := tx.Exec("INSERT INTO users (email, passwd) VALUES (?, ?)", user.Email, user.Passwd)
+	result, err := tx.Exec("INSERT INTO users (email, passwd) VALUES (?, ?)", user.Email, user.Passwd)
 	if err != nil {
 		return -1, err
 	}
-	id, err = resut.LastInsertId()
+	id, err = result.LastInsertId()
+	if err != nil {
+		return -1, err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return -1, err
+	}
+	return id, nil
+}
+
+func (dbm *DBManager) SaveTask(task *NewTaskRequest) (id int64, err error) {
+	var tx *sql.Tx
+	tx, err = dbm.db.Begin()
+	if err != nil {
+		return -1, err
+	}
+	defer tx.Rollback()
+
+	var result sql.Result
+	result, err = tx.Exec("INSERT INTO tasks (title, done, user_id) VALUES (?, ?, ?)", task.Title, task.Done, task.UserID)
+	if err != nil {
+		return -1, err
+	}
+	id, err = result.LastInsertId()
 	if err != nil {
 		return -1, err
 	}

@@ -14,7 +14,7 @@ type UserDB interface {
 	SaveUser(user *db.UserRequest) (id int64, err error)
 }
 
-func RegisterHandler(dbm UserDB, secret []byte) http.HandlerFunc {
+func Register(dbm UserDB, secret []byte) http.HandlerFunc {
 	// Receive request and save user locally
 	return func(w http.ResponseWriter, r *http.Request) {
 		var err error
@@ -58,7 +58,7 @@ func RegisterHandler(dbm UserDB, secret []byte) http.HandlerFunc {
 	}
 }
 
-func LoginHandler(dbm UserDB, secret []byte) http.HandlerFunc {
+func Login(dbm UserDB, secret []byte) http.HandlerFunc {
 	// Receive request and save user locally
 	return func(w http.ResponseWriter, r *http.Request) {
 		var err error

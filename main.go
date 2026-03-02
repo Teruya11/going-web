@@ -27,18 +27,24 @@ func main() {
 
 	var secret []byte = []byte("secret")
 	var mux *http.ServeMux = http.NewServeMux()
-	mux.HandleFunc("/register", handlers.RegisterHandler(dbm, secret))
-	mux.HandleFunc("/login", handlers.LoginHandler(dbm, secret))
-	mux.HandleFunc("/time", middleware(secret, timeHandler(time.RFC1123)))
+	mux.HandleFunc("/register", handlers.Register(dbm, secret))
+	mux.HandleFunc("/login", handlers.Login(dbm, secret))
+	mux.HandleFunc("/new-task", handlers.NewTask(dbm))
+	mux.HandleFunc("/time", timeHandler(time.RFC1123))
 
 	const port int = 3000
 	log.Printf("Listening on %d\n", port)
-	err = http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", port), middleware(secret, mux))
 	log.Fatal(err)
 }
 
 func middleware(secret []byte, handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" || r.URL.Path == "/register" {
+			handler.ServeHTTP(w, r)
+			return
+		}
+
 		var authHeader string
 		var ok bool
 		var tkn string
