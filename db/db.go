@@ -24,11 +24,15 @@ type NewTaskRequest struct {
 	Done   bool   `json:"done"`
 }
 
+type GetTasksRequest struct {
+	UserID int64 `json:"user_id"`
+}
+
 type Task struct {
-	Title  string
-	ID     int64
-	UserID int64
-	Done   bool
+	Title  string `json:"title"`
+	ID     int64  `json:"id"`
+	UserID int64  `json:"user_id"`
+	Done   bool   `json:"done"`
 }
 
 type DBManager struct {
@@ -38,7 +42,7 @@ type DBManager struct {
 func (dbm *DBManager) Connect(user string, passwd string, dbname string) error {
 	var err error
 
-	cfg := mysql.NewConfig()
+	var cfg *mysql.Config = mysql.NewConfig()
 	cfg.User = user
 	cfg.Passwd = passwd
 	cfg.DBName = dbname
@@ -145,4 +149,26 @@ func (dbm *DBManager) SaveTask(task *NewTaskRequest) (id int64, err error) {
 		return -1, err
 	}
 	return id, nil
+}
+
+func (dbm *DBManager) GetTasksFromUser(userID int64) (tasks []Task, err error) {
+	var q *sql.Rows
+	q, err = dbm.db.Query("SELECT * FROM tasks WHERE user_id = ?", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer q.Close()
+
+	for q.Next() {
+		var task Task
+		err = q.Scan(&task.ID, &task.Done, &task.Title, &task.UserID)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	if q.Err() != nil {
+		return nil, q.Err()
+	}
+	return tasks, nil
 }

@@ -30,6 +30,7 @@ func main() {
 	mux.HandleFunc("/register", handlers.Register(dbm, secret))
 	mux.HandleFunc("/login", handlers.Login(dbm, secret))
 	mux.HandleFunc("/new-task", handlers.NewTask(dbm))
+	mux.HandleFunc("/get-tasks", handlers.GetTasks(dbm))
 	mux.HandleFunc("/time", timeHandler(time.RFC1123))
 
 	const port int = 3000
